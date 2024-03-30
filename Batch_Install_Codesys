@@ -1,0 +1,119 @@
+import tkinter as tk
+from tkinter import ttk
+import paramiko
+from paramiko import SSHClient, AutoAddPolicy
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+
+# List to store the devices
+devices = []
+
+# Function to add a device to the devices list
+def add_device():
+    hostname = hostname_entry.get()
+    username = username_entry.get()
+    password = password_entry.get()
+    program_path = program_path_entry.get()
+    
+    devices.append({
+        'hostname': hostname,
+        'username': username,
+        'password': password,
+        'program_path': program_path,
+    })
+    
+    # Update the devices list in the GUI
+    update_devices_list()
+
+    # Clear input fields
+    hostname_entry.delete(0, tk.END)
+    username_entry.delete(0, tk.END)
+    password_entry.delete(0, tk.END)
+    program_path_entry.delete(0, tk.END)
+
+# Function to update the devices list in the GUI
+def update_devices_list():
+    devices_list.delete(0, tk.END)
+    for device in devices:
+        devices_list.insert(tk.END, f'{device["hostname"]} - {device["program_path"]}')
+
+# Function to install the CODESYS program on all devices
+def install_on_all_devices():
+    output_text.delete('1.0', tk.END)  # Clear previous output
+    for device in devices:
+        install_codesys_program(device)
+
+# Function to install the CODESYS program on a device
+def install_codesys_program(device):
+    try:
+        # Create SSH client
+        ssh_client = SSHClient()
+        ssh_client.set_missing_host_key_policy(AutoAddPolicy())
+
+        # Connect to the SSH server
+        ssh_client.connect(
+            hostname=device['hostname'],
+            username=device['username'],
+            password=device['password'],
+            look_for_keys=False,
+            allow_agent=False,
+            auth_timeout=10
+        )
+
+        # Use AES-256-CBC cipher for encryption
+        backend = default_backend()
+        key = b'Sixteen byte key'
+        iv = b'InitializationVe'
+
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+        ssh_client.get_transport().set_cipher_list(['aes256-cbc'])
+
+        # Execute commands to install the program
+        stdin, stdout, stderr = ssh_client.exec_command(f'cd {device["program_path"]} && ./install.sh')
+        
+        # Print command output
+        output_text.insert(tk.END, f'Output for {device["hostname"]}:\n')
+        output_text.insert(tk.END, stdout.read().decode('utf-8'))
+        output_text.insert(tk.END, stderr.read().decode('utf-8'))
+        output_text.insert(tk.END, f'Installation completed on {device["hostname"]}\n\n')
+
+        # Close SSH connection
+        ssh_client.close()
+    except Exception as e:
+        output_text.insert(tk.END, f'Error installing program on {device["hostname"]}: {str(e)}\n\n')
+
+# Create the GUI window
+root = tk.Tk()
+root.title('CODESYS Program Installer')
+
+# Create and place GUI components
+ttk.Label(root, text='Hostname:').grid(row=0, column=0, padx=5, pady=5)
+hostname_entry = ttk.Entry(root)
+hostname_entry.grid(row=0, column=1, padx=5, pady=5)
+
+ttk.Label(root, text='Username:').grid(row=1, column=0, padx=5, pady=5)
+username_entry = ttk.Entry(root)
+username_entry.grid(row=1, column=1, padx=5, pady=5)
+
+ttk.Label(root, text='Password:').grid(row=2, column=0, padx=5, pady=5)
+password_entry = ttk.Entry(root, show='*')
+password_entry.grid(row=2, column=1, padx=5, pady=5)
+
+ttk.Label(root, text='Program Path:').grid(row=3, column=0, padx=5, pady=5)
+program_path_entry = ttk.Entry(root)
+program_path_entry.grid(row=3, column=1, padx=5, pady=5)
+
+add_button = ttk.Button(root, text='Add Device', command=add_device)
+add_button.grid(row=4, column=0, columnspan=2, pady=10)
+
+devices_list = tk.Listbox(root, height=5, width=50)
+devices_list.grid(row=5, column=0, columnspan=2, padx=5, pady=5)
+
+install_button = ttk.Button(root, text='Install Programs', command=install_on_all_devices)
+install_button.grid(row=6, column=0, columnspan=2, pady=10)
+
+output_text = tk.Text(root, height=10, width=80)
+output_text.grid(row=7, column=0, columnspan=2, padx=10, pady=10)
+
+# Start the GUI event loop
+root.mainloop()
